@@ -84,8 +84,8 @@ $ python crypto_cli.py encrypt -f secret.txt -o secret.encrypted
 python crypto_cli.py decrypt -d "gAAAAABhpqL4..."
 
 # ファイルを復号化
-python crypto_cli.py decrypt -f encrypted.bin -o output.txt
-python crypto_cli.py decrypt -f encrypted.bin  # 自動で encrypted.bin.decrypted に出力
+python crypto_cli.py decrypt -f document.decrypted -o output.txt
+python crypto_cli.py decrypt -f document.decrypted  # コンソール上にのみ復号文を出力
 ```
 
 **実行例:**
