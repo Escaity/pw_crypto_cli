@@ -208,13 +208,14 @@ class PasswordCrypto:
             raise CryptoError(f"ファイル復号化に失敗しました: {e}")
 
 
-def get_password(prompt="パスワードを入力してください: ", confirm=False):
+def get_secure_password(prompt="パスワードを入力してください: ", confirm=False, min_length=8):
     """
-    パスワードを安全に入力
+    パスワードを安全に入力（強度チェック付き）
 
     Args:
         prompt (str): 入力プロンプト
         confirm (bool): パスワード確認を行うか
+        min_length (int): 最小長（デフォルト8文字）
 
     Returns:
         str: 入力されたパスワード
@@ -222,17 +223,76 @@ def get_password(prompt="パスワードを入力してください: ", confirm=
     Raises:
         CryptoError: パスワードが一致しない場合
     """
-    password = getpass.getpass(prompt)
+    # よく使われる脆弱なパスワードのリスト（一部）
+    weak_passwords = {
+        'password', '123456', '12345678', 'qwerty', 'abc123',
+        'password123', 'admin', 'letmein', 'welcome', 'monkey',
+        '1234567890', 'password1', '123456789', 'qwerty123'
+    }
 
-    if confirm:
-        password_confirm = getpass.getpass("パスワードを再入力してください: ")
-        if password != password_confirm:
-            raise CryptoError("パスワードが一致しません")
+    while True:
+        password = getpass.getpass(prompt)
 
-    if not password:
-        raise CryptoError("パスワードが空です")
+        if not password:
+            print("エラー: パスワードが空です", file=sys.stderr)
+            continue
 
-    return password
+        if len(password) < min_length:
+            print(f"エラー: パスワードは{min_length}文字以上にしてください", file=sys.stderr)
+            continue
+
+        # 脆弱なパスワードチェック
+        if password.lower() in weak_passwords:
+            print("エラー: そのパスワードは一般的すぎて危険です", file=sys.stderr)
+            continue
+
+        # パスワード強度チェック
+        if confirm:
+            has_lower = any(c.islower() for c in password)
+            has_upper = any(c.isupper() for c in password)
+            has_digit = any(c.isdigit() for c in password)
+            has_special = any(c in "!@#$%^&*(),.?\":{}|<>[]+=_-~`" for c in password)
+
+            # 連続文字チェック
+            has_sequence = False
+            for i in range(len(password) - 2):
+                if (ord(password[i + 1]) == ord(password[i]) + 1 and
+                        ord(password[i + 2]) == ord(password[i]) + 2):
+                    has_sequence = True
+                    break
+
+            # 繰り返し文字チェック
+            has_repeat = False
+            for i in range(len(password) - 2):
+                if password[i] == password[i + 1] == password[i + 2]:
+                    has_repeat = True
+                    break
+
+            strength_score = sum([has_lower, has_upper, has_digit, has_special])
+
+            # 強度評価
+            if strength_score < 3:
+                print("警告: パスワードが弱いです。大文字、小文字、数字、記号を組み合わせてください。", file=sys.stderr)
+            elif has_sequence:
+                print("警告: 連続した文字の使用は避けてください（例: abc, 123）", file=sys.stderr)
+            elif has_repeat:
+                print("警告: 同じ文字の連続は避けてください（例: aaa, 111）", file=sys.stderr)
+
+            if strength_score < 3 or has_sequence or has_repeat:
+                if input("このパスワードを使用しますか？ (y/N): ").lower() != 'y':
+                    continue
+
+        if confirm:
+            password_confirm = getpass.getpass("パスワードを再入力してください: ")
+            if password != password_confirm:
+                print("エラー: パスワードが一致しません", file=sys.stderr)
+                # 確認用パスワードをメモリから消去
+                password_confirm = '\x00' * len(password_confirm)
+                continue
+            # 確認用パスワードをメモリから消去
+            password_confirm = '\x00' * len(password_confirm)
+
+        return password
 
 
 def encrypt_command(args):
@@ -241,7 +301,7 @@ def encrypt_command(args):
 
     try:
         # パスワード入力
-        password = get_password("暗号化用パスワードを入力してください: ", confirm=True)
+        password = get_secure_password("暗号化用パスワードを入力してください: ", confirm=True)
 
         if args.text:
             # テキストを直接暗号化
@@ -297,7 +357,7 @@ def decrypt_command(args):
 
     try:
         # パスワード入力
-        password = get_password("復号化用パスワードを入力してください: ")
+        password = get_secure_password("復号化用パスワードを入力してください: ")
 
         if args.data:
             # Base64データを直接復号化
